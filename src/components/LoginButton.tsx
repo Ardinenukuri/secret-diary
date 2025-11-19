@@ -1,47 +1,94 @@
-"use client";
+'use client';
 
-import React from "react";
+import React, { useEffect } from 'react';
 
-function randomState(length = 32) {
+function randomState(length = 16) {
   const array = new Uint8Array(length);
-  if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
     window.crypto.getRandomValues(array);
   } else {
     for (let i = 0; i < length; i++) array[i] = Math.floor(Math.random() * 256);
   }
   return Array.from(array)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export const LoginButton: React.FC = () => {
-  const onClick = () => {
-    const authBase = process.env.NEXT_PUBLIC_IAA_AUTH_URL;
+  const openPopup = () => {
+    const authUrl = process.env.NEXT_PUBLIC_IAA_AUTH_URL;
     const clientId = process.env.NEXT_PUBLIC_IAA_CLIENT_ID;
-    const appBase = process.env.NEXT_PUBLIC_APP_BASE_URL;
+    const appBaseUrl = process.env.NEXT_PUBLIC_APP_BASE_URL;
 
-    if (!authBase || !clientId || !appBase) {
-      console.error("Missing required environment variables for OAuth redirect.");
+    if (!authUrl || !clientId || !appBaseUrl) {
+      console.error('Missing required environment variables for OAuth redirect.');
+      alert('Authentication is currently unavailable. Please contact support.');
       return;
     }
 
-    const state = randomState(16);
-    const redirectUri = `${appBase}/api/callback`;
+    const state = randomState();
+    sessionStorage.setItem('oauth_state', state);
+
+    const redirectUri = `${appBaseUrl}/api/callback`;
 
     const params = new URLSearchParams({
-      response_type: "code",
+      response_type: 'code',
       client_id: clientId,
       redirect_uri: redirectUri,
       state,
+      display: 'popup',
     });
 
-    const url = `${authBase}/auth/login?${params.toString()}`;
-    window.location.href = url;
+    const url = `${authUrl}/auth/login?${params.toString()}`;
+
+    const width = 450;
+    const height = 500;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    const popup = window.open(
+      url,
+      'iaa-login-popup',
+      `width=${width},height=${height},left=${left},top=${top}`
+    );
+
+    popup?.focus();
   };
+
+  useEffect(() => {
+    const handleAuthMessage = (event: MessageEvent) => {
+      if (!process.env.NEXT_PUBLIC_IAA_AUTH_URL) return;
+
+      const authOrigin = new URL(process.env.NEXT_PUBLIC_IAA_AUTH_URL).origin;
+      if (event.origin !== authOrigin) {
+        return;
+      }
+
+      const { type, code, state } = event.data;
+
+      if (type === 'iaa-auth-callback') {
+        const storedState = sessionStorage.getItem('oauth_state');
+        sessionStorage.removeItem('oauth_state');
+
+        if (!state || state !== storedState) {
+          console.error('OAuth state mismatch detected. Possible CSRF attack.');
+          return;
+        }
+        
+        window.location.href = `/api/callback?code=${code}`;
+      }
+    };
+
+    window.addEventListener('message', handleAuthMessage);
+
+    return () => {
+      window.removeEventListener('message', handleAuthMessage);
+    };
+  }, []);
 
   return (
     <button
-      onClick={onClick}
+      onClick={openPopup}
       className="rounded-md bg-black px-4 py-2 text-white hover:bg-gray-800"
     >
       Login with IST Africa Auth
