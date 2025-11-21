@@ -1,32 +1,34 @@
 import type { Request, Response, NextFunction } from 'express';
-import { env } from '../env';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-export type AuthedRequest = Request & { user?: { id: string; [k: string]: unknown } };
+export type AuthedRequest = Request & {
+  user?: {
+    sub: string; 
+    [key: string]: any; 
+  };
+};
+
+const IAA_SERVER_URL = process.env.IAA_AUTH_BACKEND_URL || 'http://localhost:5000';
+
+const JWKS = createRemoteJWKSet(
+  new URL(`${IAA_SERVER_URL}/api/auth/jwks`)
+);
 
 export async function authMiddleware(req: AuthedRequest, res: Response, next: NextFunction) {
   try {
-    const header = req.header('authorization') || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : undefined;
-    if (!token) return res.status(401).json({ error: 'Missing bearer token' });
-
-    if (!env.IAA_AUTH_URL) return res.status(500).json({ error: 'Auth server not configured' });
-
-    const userinfoUrl = new URL('/api/auth/userinfo', env.IAA_AUTH_URL).toString();
-    const r = await fetch(userinfoUrl, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!r.ok) {
-      const t = await r.text();
-      return res.status(401).json({ error: 'Invalid token', details: t });
+    const header = req.header('authorization');
+    if (!header || !header.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing or malformed bearer token' });
     }
-    const user = await r.json();
-    // Expecting at least a stable user id field
-    const id = user.sub || user.id || user.user_id || user.email;
-    if (!id) return res.status(400).json({ error: 'Userinfo missing id' });
-
-    req.user = { id, ...user };
+    const token = header.slice(7); 
+    const { payload } = await jwtVerify(token, JWKS);
+    if (!payload.sub) {
+      return res.status(401).json({ error: 'Invalid token: missing sub claim' });
+    }
+    req.user = payload as AuthedRequest['user'];
     next();
   } catch (e: any) {
-    res.status(500).json({ error: 'Auth error', message: e?.message ?? String(e) });
+    console.error('Auth middleware error:', e.message);
+    res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
   }
 }
