@@ -29,7 +29,7 @@ export const LoginButton: React.FC = () => {
     const state = randomState();
     sessionStorage.setItem('oauth_state', state);
 
-    const redirectUri = `${appBaseUrl}/api/callback`;
+    const redirectUri = `${appBaseUrl}/callback`;
 
     const params = new URLSearchParams({
       response_type: 'code',
@@ -75,7 +75,7 @@ export const LoginButton: React.FC = () => {
           return;
         }
         
-        window.location.href = `/api/callback?code=${code}`;
+        window.location.href = `/callback?code=${code}`;
       }
     };
 
