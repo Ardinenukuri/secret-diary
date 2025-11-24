@@ -89,7 +89,7 @@ export const LoginButton: React.FC = () => {
   return (
     <button
       onClick={openPopup}
-      className="rounded-md bg-black px-4 py-2 text-white hover:bg-gray-800"
+      className="rounded-2xl bg-gradient-to-r from-indigo-500 to-sky-500 px-6 py-3 text-white font-medium shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all duration-200"
     >
       Login with IST Africa Auth
     </button>
