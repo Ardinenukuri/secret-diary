@@ -1,32 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
-function getBackendBase() {
-  const base = process.env.BACKEND_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_BASE_URL || "http://localhost:4000";
-  return base.replace(/\/$/, "");
+const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || "http://localhost:4000";
+
+async function proxyRequest(req: NextRequest) {
+  const token = (await cookies()).get("accessToken")?.value;
+  if (!token) {
+    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  }
+
+  const url = `${BACKEND_BASE_URL}/entries`;
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+
+  try {
+    const body = req.method === 'POST' ? await req.json() : undefined;
+
+    const response = await fetch(url, {
+      method: req.method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    });
+
+    const data = await response.json();
+    return NextResponse.json(data, { status: response.status });
+  } catch (error) {
+    console.error(`[API Proxy] Error forwarding request to ${url}:`, error);
+    return NextResponse.json({ error: 'Proxy request failed' }, { status: 502 });
+  }
 }
 
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get("accessToken")?.value;
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-
-  const r = await fetch(`${getBackendBase()}/entries`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  const text = await r.text();
-  return new NextResponse(text, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json" } });
+  return proxyRequest(req);
 }
 
 export async function POST(req: NextRequest) {
-  const token = req.cookies.get("accessToken")?.value;
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-  const body = await req.text();
-
-  const r = await fetch(`${getBackendBase()}/entries`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body,
-  });
-  const text = await r.text();
-  return new NextResponse(text, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json" } });
+  return proxyRequest(req);
 }

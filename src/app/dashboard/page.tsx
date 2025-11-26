@@ -2,36 +2,32 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import ThoughtWorkspace from "@/components/ThoughtWorkspace";
 
+// Simplified type for the frontend
 type DiaryEntry = {
   id: number;
   content: string;
   created_at?: string;
-  updated_at?: string;
 };
 
-async function fetchEntries(token?: string | undefined | null): Promise<DiaryEntry[]> {
-  if (!token) return [];
-  const backendBase =
-    process.env.BACKEND_BASE_URL ||
-    process.env.NEXT_PUBLIC_BACKEND_BASE_URL ||
-    "http://localhost:4000";
-
+// This function now fetches from our own Next.js API route (the proxy)
+async function fetchEntries(): Promise<DiaryEntry[]> {
+  // We need to pass the cookies along so the API route can use them.
+  const cookieHeader = (await cookies()).toString();
+  const appBase = process.env.NEXT_PUBLIC_APP_BASE_URL || "http://localhost:3001";
+  
   try {
-    const response = await fetch(`${backendBase.replace(/\/$/, "")}/entries`, {
+    const response = await fetch(`${appBase}/api/entries`, {
       headers: {
-        Authorization: `Bearer ${token}`,
+        Cookie: cookieHeader,
       },
       cache: "no-store",
     });
 
     if (!response.ok) {
-      console.error("[dashboard] Failed to fetch entries:", await response.text());
+      console.error("[dashboard] Failed to fetch entries from proxy:", await response.text());
       return [];
     }
-
-    const data = await response.json();
-    if (!Array.isArray(data)) return [];
-    return data;
+    return await response.json();
   } catch (error) {
     console.error("[dashboard] Error fetching entries:", error);
     return [];
@@ -40,11 +36,11 @@ async function fetchEntries(token?: string | undefined | null): Promise<DiaryEnt
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
-  const token = cookieStore.get("accessToken");
-  if (!token) {
+  const hasToken = cookieStore.get("accessToken");
+  if (!hasToken) {
     redirect("/");
   }
-  const entries = await fetchEntries(token.value);
+  const entries = await fetchEntries();
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-100 via-white to-sky-100 px-4 py-12">
@@ -56,7 +52,7 @@ export default async function DashboardPage() {
             Capture what&apos;s on your mind today. Your words stay safe and secure with you.
           </p>
         </div>
-        <ThoughtWorkspace entries={entries} />
+        <ThoughtWorkspace initialEntries={entries} />
       </div>
     </main>
   );

@@ -1,4 +1,5 @@
 import LoginButton from "@/components/LoginButton";
+import IAAWidgetLoader from '@/components/IAAWidgetLoader'; 
 
 export default function Home() {
   return (
@@ -10,6 +11,7 @@ export default function Home() {
         </p>
         <div className="flex justify-center">
           <LoginButton />
+          <IAAWidgetLoader />
         </div>
       </div>
     </main>
