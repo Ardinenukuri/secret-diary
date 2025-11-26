@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 
 const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || "http://localhost:4000";
 
 async function proxyRequest(req: NextRequest) {
-  const token = (await cookies()).get("accessToken")?.value;
-  if (!token) {
-    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  const authHeader = req.headers.get('authorization');
+  
+  if (!authHeader) {
+    return NextResponse.json({ error: "Missing authorization header" }, { status: 401 });
   }
 
   const url = `${BACKEND_BASE_URL}/entries`;
   const headers = {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
+    'Authorization': authHeader,
+    'Content-Type': 'application/json',
   };
 
   try {

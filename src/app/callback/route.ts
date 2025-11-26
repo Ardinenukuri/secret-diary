@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { setCookie } from "cookies-next";
 
+type TokenResponse = {
+  access_token: string;
+  refresh_token: string;
+  expires_in?: number;
+};
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -72,22 +78,37 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Tokens missing in response" }, { status: 502 });
     }
 
-    const res = NextResponse.redirect(new URL("/dashboard", url));
-
-    setCookie("accessToken", accessToken, {
-      res,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-    });
-
-    setCookie("refreshToken", refreshToken, {
-      res,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
+    // Create a response with a script that will handle client-side storage
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Signing in...</title>
+          <script>
+            // Store tokens in localStorage
+            localStorage.setItem('auth_tokens', JSON.stringify({
+              accessToken: '${accessToken.replace(/'/g, "\\'")}',
+              refreshToken: '${refreshToken.replace(/'/g, "\\'")}'
+            }));
+            
+            // Set auth state
+            localStorage.setItem('iaa_authenticated', 'true');
+            
+            // Redirect to dashboard
+            window.location.href = '${new URL("/dashboard", url).toString()}';
+          </script>
+        </head>
+        <body>
+          <p>Signing you in...</p>
+        </body>
+      </html>
+    `;
+    
+    const res = new NextResponse(html, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html',
+      },
     });
 
     return res;

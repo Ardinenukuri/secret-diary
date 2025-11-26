@@ -5,28 +5,50 @@ function getBackendBase() {
   return base.replace(/\/$/, "");
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const token = req.cookies.get("accessToken")?.value;
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-  const body = await req.text();
+async function handleRequest(
+  req: NextRequest,
+  { params, method }: { params: { id: string }, method: 'PUT' | 'DELETE' }
+) {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    return NextResponse.json({ error: "Missing authorization header" }, { status: 401 });
+  }
 
-  const r = await fetch(`${getBackendBase()}/entries/${params.id}`, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body,
-  });
-  const text = await r.text();
-  return new NextResponse(text, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json" } });
+  const url = `${getBackendBase()}/entries/${params.id}`;
+  const headers = {
+    'Authorization': authHeader,
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    const body = method === 'PUT' ? await req.text() : undefined;
+    
+    const response = await fetch(url, {
+      method,
+      headers,
+      body,
+    });
+
+    const text = await response.text();
+    return new NextResponse(text, { 
+      status: response.status, 
+      headers: { 
+        'content-type': response.headers.get('content-type') || 'application/json' 
+      } 
+    });
+  } catch (error) {
+    console.error(`[API] Error in ${method} /api/entries/${params.id}:`, error);
+    return NextResponse.json(
+      { error: 'Failed to process request' }, 
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  return handleRequest(req, { params, method: 'PUT' });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const token = req.cookies.get("accessToken")?.value;
-  if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-
-  const r = await fetch(`${getBackendBase()}/entries/${params.id}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const text = await r.text();
-  return new NextResponse(text, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json" } });
+  return handleRequest(req, { params, method: 'DELETE' });
 }

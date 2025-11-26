@@ -1,46 +1,46 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import ThoughtWorkspace from "@/components/ThoughtWorkspace";
+import { DiaryEntry } from "@/types";
+import { fetchWithAuth } from "@/lib/api";
 
-// Simplified type for the frontend
-type DiaryEntry = {
-  id: number;
-  content: string;
-  created_at?: string;
-};
-
-// This function now fetches from our own Next.js API route (the proxy)
-async function fetchEntries(): Promise<DiaryEntry[]> {
-  // We need to pass the cookies along so the API route can use them.
-  const cookieHeader = (await cookies()).toString();
+export default function DashboardPage() {
+  const router = useRouter();
+  const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const appBase = process.env.NEXT_PUBLIC_APP_BASE_URL || "http://localhost:3001";
-  
-  try {
-    const response = await fetch(`${appBase}/api/entries`, {
-      headers: {
-        Cookie: cookieHeader,
-      },
-      cache: "no-store",
-    });
 
-    if (!response.ok) {
-      console.error("[dashboard] Failed to fetch entries from proxy:", await response.text());
-      return [];
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("[dashboard] Error fetching entries:", error);
-    return [];
-  }
-}
+  useEffect(() => {
+    const fetchEntries = async () => {
+      try {
+        const response = await fetchWithAuth(`${appBase}/api/entries`);
+        if (!response) return; // Redirect handled in fetchWithAuth
+        
+        if (response.ok) {
+          const data = await response.json();
+          setEntries(data);
+        } else {
+          console.error("[dashboard] Failed to fetch entries:", await response.text());
+        }
+      } catch (error) {
+        console.error("[dashboard] Error fetching entries:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-export default async function DashboardPage() {
-  const cookieStore = await cookies();
-  const hasToken = cookieStore.get("accessToken");
-  if (!hasToken) {
-    redirect("/");
+    fetchEntries();
+  }, [appBase]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
   }
-  const entries = await fetchEntries();
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-100 via-white to-sky-100 px-4 py-12">

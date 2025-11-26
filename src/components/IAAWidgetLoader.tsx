@@ -38,7 +38,7 @@ const IAAWidgetLoader: React.FC = () => {
 
     const script = document.createElement('script');
     script.id = 'iaa-widget-script';
-    script.src = `${process.env.NEXT_PUBLIC_IAA_URL}/widget/iaa-widget.js`;
+    script.src = `${process.env.NEXT_PUBLIC_IAA_URL}/widgets/iaa-widget.js`;
     script.async = true;
     script.onerror = () => console.error('Failed to load the IAA authentication widget script.');
     document.body.appendChild(script);

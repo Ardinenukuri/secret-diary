@@ -70,8 +70,12 @@ export const LoginButton: React.FC = () => {
         const storedState = sessionStorage.getItem('oauth_state');
         sessionStorage.removeItem('oauth_state');
 
+        if (!storedState) {
+          return;
+        }
+
         if (!state || state !== storedState) {
-          console.error('OAuth state mismatch detected. Possible CSRF attack.');
+          console.warn('OAuth state mismatch detected for login popup, ignoring message.');
           return;
         }
         
