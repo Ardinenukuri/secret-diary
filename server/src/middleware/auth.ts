@@ -1,34 +1,42 @@
 import type { Request, Response, NextFunction } from 'express';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
-
 export type AuthedRequest = Request & {
   user?: {
-    sub: string; 
-    [key: string]: any; 
+    sub: string;
+    [key: string]: any;
   };
 };
 
 const IAA_SERVER_URL = process.env.IAA_AUTH_BACKEND_URL || 'http://localhost:5000';
 
-const JWKS = createRemoteJWKSet(
-  new URL(`${IAA_SERVER_URL}/api/auth/jwks`)
-);
+let JWKS: ReturnType<typeof import('jose')['createRemoteJWKSet']>;
 
 export async function authMiddleware(req: AuthedRequest, res: Response, next: NextFunction) {
   try {
+    const { createRemoteJWKSet, jwtVerify } = await import('jose');
+    
+    if (!JWKS) {
+      JWKS = createRemoteJWKSet(
+        new URL(`${IAA_SERVER_URL}/api/auth/jwks`)
+      );
+    }
+    
     const header = req.header('authorization');
     if (!header || !header.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or malformed bearer token' });
     }
-    const token = header.slice(7); 
+    const token = header.slice(7);
+
     const { payload } = await jwtVerify(token, JWKS);
-    if (!payload.sub) {
-      return res.status(401).json({ error: 'Invalid token: missing sub claim' });
+
+    if (typeof payload.sub !== 'string') {
+      console.error('[authMiddleware] Missing sub claim on token');
+      return res.status(401).json({ error: 'Unauthorized: token missing subject' });
     }
-    req.user = payload as AuthedRequest['user'];
+
+    req.user = { ...(payload as { [key: string]: any }), sub: payload.sub };
     next();
   } catch (e: any) {
-    console.error('Auth middleware error:', e.message);
+    console.error('[authMiddleware] Error:', e.message);
     res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
   }
 }
