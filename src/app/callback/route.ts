@@ -94,6 +94,9 @@ export async function GET(request: Request) {
             // Set auth state
             localStorage.setItem('iaa_authenticated', 'true');
             
+            // Signal sync (optional, if using postLoginSyncCheck)
+            sessionStorage.setItem('iaa_sync_flag', 'true');
+            
             // Redirect to dashboard
             window.location.href = '${new URL("/dashboard", url).toString()}';
           </script>
@@ -116,4 +119,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Callback error", message: err?.message ?? String(err) }, { status: 500 });
   }
 }
-
