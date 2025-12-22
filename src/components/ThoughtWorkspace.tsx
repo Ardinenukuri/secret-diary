@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import LogoutButton from "./LogoutButton";
+import { fetchWithAuth } from "@/lib/api"; 
 
 type DiaryEntry = {
   id: number | string;
@@ -12,20 +12,19 @@ type DiaryEntry = {
 
 type Props = {
   initialEntries: DiaryEntry[];
+  setEntries: React.Dispatch<React.SetStateAction<DiaryEntry[]>>;
 };
 
 const tabs = [{ id: "compose", label: "New Thought" }, { id: "history", label: "Previous Thoughts" }];
 
-export default function ThoughtWorkspace({ initialEntries }: Props) {
+export default function ThoughtWorkspace({ initialEntries, setEntries }: Props) {
   const [activeTab, setActiveTab] = useState<string>("compose");
   const [newThought, setNewThought] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
 
-  // Use the initial entries from the server as the starting point
   const formattedEntries = useMemo(
     () =>
-      (initialEntries ?? []).map((entry) => ({
+      [...initialEntries].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()).map((entry) => ({
         ...entry,
         createdLabel: entry.created_at
           ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.created_at))
@@ -38,27 +37,32 @@ export default function ThoughtWorkspace({ initialEntries }: Props) {
     if (!newThought.trim()) return;
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/entries', {
+
+      const response = await fetchWithAuth('/api/entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: newThought }),
       });
 
+      if (!response) return; 
+
       if (!response.ok) {
-        throw new Error('Failed to submit entry');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to submit entry');
       }
       
-      setNewThought(""); // Clear the textarea
-      setIsSubmitting(false);
+      const newEntry = await response.json();
+
+
+      setEntries(prevEntries => [newEntry, ...prevEntries]);
       
-      // Refresh the page to show the new entry. A more advanced solution
-      // would be to update the state without a full reload.
-      router.refresh();
+      setNewThought("");
       setActiveTab("history");
 
     } catch (error) {
       console.error("Submission error:", error);
-      alert("Could not submit your thought. Please try again.");
+      alert(`Could not submit your thought: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
       setIsSubmitting(false);
     }
   };

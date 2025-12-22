@@ -1,31 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import ThoughtWorkspace from "@/components/ThoughtWorkspace";
-import { DiaryEntry } from "@/types";
+
+
+type DiaryEntry = {
+  id: string | number;
+  content: string;
+  created_at?: string;
+};
+
 import { fetchWithAuth } from "@/lib/api";
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const appBase = process.env.NEXT_PUBLIC_APP_BASE_URL || "http://localhost:3001";
 
   useEffect(() => {
     const fetchEntries = async () => {
       try {
         const response = await fetchWithAuth(`${appBase}/api/entries`);
-        if (!response) return; // Redirect handled in fetchWithAuth
+        if (!response) return;
         
         if (response.ok) {
           const data = await response.json();
           setEntries(data);
         } else {
-          console.error("[dashboard] Failed to fetch entries:", await response.text());
+          const errorText = await response.text();
+          console.error("[dashboard] Failed to fetch entries:", errorText);
+          setError("Could not load your diary entries. Please try again later.");
         }
       } catch (error) {
         console.error("[dashboard] Error fetching entries:", error);
+        setError("An unexpected error occurred.");
       } finally {
         setLoading(false);
       }
@@ -37,7 +46,15 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
+        <p>Loading your thoughts...</p>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-red-500">{error}</p>
       </div>
     );
   }
@@ -52,7 +69,7 @@ export default function DashboardPage() {
             Capture what&apos;s on your mind today. Your words stay safe and secure with you.
           </p>
         </div>
-        <ThoughtWorkspace initialEntries={entries} />
+        <ThoughtWorkspace initialEntries={entries} setEntries={setEntries} />
       </div>
     </main>
   );
