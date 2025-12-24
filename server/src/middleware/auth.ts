@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { importSPKI, jwtVerify, type KeyLike } from 'jose';
 
 export type AuthedRequest = Request & {
   user?: {
@@ -7,46 +8,41 @@ export type AuthedRequest = Request & {
   };
 };
 
-const IAA_SERVER_URL = process.env.IAA_IAA_AUTH_BACKEND_URL || 'http://localhost:5000';
-
+let localPublicKey: KeyLike;
 
 export async function authMiddleware(req: AuthedRequest, res: Response, next: NextFunction) {
   try {
+    if (!localPublicKey) {
+      console.log('[authMiddleware] Initializing static public key from environment...');
+      const publicKeyPem = process.env.IAA_PUBLIC_KEY?.replace(/\\n/g, '\n');
+      if (!publicKeyPem) {
+        throw new Error('IAA_PUBLIC_KEY is not configured in environment variables.');
+      }
+      localPublicKey = await importSPKI(publicKeyPem, 'RS256');
+    }
+
     const header = req.header('authorization');
     if (!header || !header.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or malformed bearer token' });
     }
     const token = header.slice(7);
 
-    // 1. Call the IAA server's introspection endpoint.
-    const introspectionResponse = await fetch(`${IAA_SERVER_URL}/api/auth/introspect`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ token: token }),
-    });
+    const { payload } = await jwtVerify(token, localPublicKey);
+    console.log("Successfully verified token for user:", payload.sub);
 
-    if (!introspectionResponse.ok) {
-      throw new Error(`Introspection endpoint returned an error status: ${introspectionResponse.status}`);
+    if (typeof payload.sub !== 'string') {
+      console.error('[authMiddleware] Token is missing the required "sub" (subject) claim.');
+      return res.status(401).json({ error: 'Unauthorized: Invalid token claims' });
     }
 
-    const result = await introspectionResponse.json();
-
-    // 2. Check the "active" status from the IAA server's response.
-    if (result.active === true) {
-      // 3. If the token is active, attach the user payload and proceed.
-      req.user = {
-        sub: result.sub,
-        ...result,
-      };
-      next();
-    } else {
-      // If the token is not active, deny access.
-      res.status(401).json({ error: 'Unauthorized: Token is not active' });
-    }
+    req.user = { 
+      ...(payload as { [key: string]: any }), 
+      sub: payload.sub 
+    };
+    
+    next();
   } catch (e: any) {
-    console.error('[authMiddleware] Introspection Error:', e.message);
-    res.status(500).json({ error: 'Authentication service error' });
+    console.error('[authMiddleware] Static key validation failed:', e.message);
+    res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
   }
 }
